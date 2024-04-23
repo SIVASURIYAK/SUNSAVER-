@@ -1,0 +1,74 @@
+#include <Servo.h>
+
+Servo servohori;
+Servo servove3  
+int servoh = 90;
+int servov = 90;
+int servohLimitHigh = 180;
+int servohLimitLow = 10;
+int servovLimitHigh = 180;
+int servovLimitLow = 10;
+
+int ldrtopr = A1;
+int ldrtopl = A2;
+int ldrbotr = A0;
+int ldrbotl = A3;
+int ldrReadings[4] = {0, 0, 0, 0};
+int ldrIndex = 0;
+
+const int smoothingFactor = 10;
+const int threshold = 20;
+const int deadZone = 5;
+
+void setup() {
+  servohori.attach(10);
+  servoverti.attach(9);
+  calibrateServos(); // Calibrate servo positions
+  delay(500);
+}
+
+void loop() {
+  readAndSmoothLDR();
+  int avgtop = (ldrReadings[0] + ldrReadings[1]) / 2;
+  int avgbot = (ldrReadings[2] + ldrReadings[3]) / 2;
+  int avgleft = (ldrReadings[0] + ldrReadings[2]) / 2;
+  int avgright = (ldrReadings[1] + ldrReadings[3]) / 2;
+
+  adjustVerticalServo(avgtop, avgbot);
+  adjustHorizontalServo(avgleft, avgright);
+
+  // Add error handling, calibration, etc.
+  delay(50);
+}
+
+void calibrateServos() {
+  servohori.write(servoh);
+  servoverti.write(servov);
+  delay(1000);  // Allow time for servos to reach initial positions
+}
+
+void readAndSmoothLDR() {
+  int ldrPins[4] = {ldrtopr, ldrtopl, ldrbotr, ldrbotl}; // Corrected array name
+  for (int i = 0; i < 4; i++) {
+    ldrReadings[i] += analogRead(ldrPins[i]) / smoothingFactor; // Corrected array name
+  }
+  ldrIndex = (ldrIndex + 1) % smoothingFactor;
+}
+
+void adjustVerticalServo(int avgtop, int avgbot) {
+  int servovChange = 0;
+  if (abs(avgtop - avgbot) > threshold) {
+    servovChange = (avgtop - avgbot) / 5;
+  }
+  servov = constrain(servov + servovChange, servovLimitLow + deadZone, servovLimitHigh - deadZone);
+  servoverti.write(servov);
+}
+
+void adjustHorizontalServo(int avgleft, int avgright) {
+  int servohChange = 0;
+  if (abs(avgleft - avgright) > threshold) {
+    servohChange = (avgright - avgleft) / 5;
+  }
+  servoh = constrain(servoh + servohChange, servohLimitLow + deadZone, servohLimitHigh - deadZone);
+  servohori.write(servoh);
+}
