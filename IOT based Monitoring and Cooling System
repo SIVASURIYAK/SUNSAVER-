@@ -1,0 +1,133 @@
+#define BLYNK_TEMPLATE_NAME "SOLAR PANEL MONITORING SYSTEM"
+#define BLYNK_TEMPLATE_ID "TMPL3FszDsB0D"
+#define BLYNK_AUTH_TOKEN "9JhHEA64EwvRjlZVNN-ftLXAacaiA_cu"
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+#define ONE_WIRE_BUS 14 
+#define PUMP_PIN 18      
+#define LIGHT_SENSOR_PIN 32
+#define red_pin 2
+#define green_pin 5
+#define buzzer_pin 19
+const int voltageSensorPin = 34;
+
+char auth[] = ""; // Blynk authentication token
+char ssid[] = "";   // Your WiFi SSID
+char pass[] = ""; // Your WiFi password
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+BlynkTimer timer;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); 
+
+float thresholdTemp = 30; 
+
+void sendSensorData();
+void displayOnLCD(float temperature, bool motorStatus, float voltage, int lightIntensity);
+
+void setup() {
+  Serial.begin(9600);
+  Blynk.begin(auth, ssid, pass);
+  sensors.begin();
+  pinMode(PUMP_PIN, OUTPUT);
+  pinMode(green_pin, OUTPUT);
+  pinMode(red_pin, OUTPUT);
+  pinMode(buzzer_pin, OUTPUT);
+  timer.setInterval(1000L, sendSensorData);
+
+  lcd.init();
+  lcd.backlight(); 
+  lcd.clear();     
+  lcd.setCursor(0, 0);
+  lcd.print("Temp:   MS: ");
+  lcd.setCursor(0, 1);
+  lcd.print("V:      LI: ");
+  Blynk.virtualWrite(V0, thresholdTemp);
+  Blynk.syncVirtual(V0); 
+  digitalWrite(green_pin, HIGH); 
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
+
+void sendSensorData() {
+  sensors.requestTemperatures();
+  double temperature = sensors.getTempCByIndex(0);
+  Blynk.virtualWrite(V14, temperature);
+  
+  int analogValue = analogRead(LIGHT_SENSOR_PIN);
+  String lightIntensity;
+  if (analogValue < 40) {
+    lightIntensity = "Dark";
+  } else if (analogValue < 800) {
+    lightIntensity = "Dim";
+  } else if (analogValue < 2000) {
+    lightIntensity = "Light";
+  } else if (analogValue < 3200) {
+    lightIntensity = "Bright";
+  } else {
+    lightIntensity = "V.Bright";
+  }
+  Blynk.virtualWrite(V15, lightIntensity);
+
+
+  float sensorValue = analogRead(voltageSensorPin);
+
+ 
+  float voltage = sensorValue * (5.0 / 1023.0);
+  Blynk.virtualWrite(V16, voltage); 
+  
+  bool motorStatus = (temperature > thresholdTemp);
+  if (motorStatus) {
+    digitalWrite(green_pin, LOW);
+
+    digitalWrite(PUMP_PIN, HIGH); 
+    Blynk.virtualWrite(V18, "ON"); 
+    digitalWrite(red_pin, HIGH);
+    delay(500); 
+    digitalWrite(red_pin, LOW); // Turn off red LED
+    delay(500); 
+  } else {
+    digitalWrite(green_pin, HIGH);
+
+    digitalWrite(PUMP_PIN, LOW);
+     
+    Blynk.virtualWrite(V18, "OFF"); // Virtual pin V18 for pump status
+  }
+
+  
+  displayOnLCD(temperature, motorStatus, voltage, analogValue);
+}
+
+void displayOnLCD(double temperature, bool motorStatus, float voltage, int lightIntensity) {
+  lcd.clear(); 
+  
+  
+  lcd.setCursor(0, 0);
+  lcd.print("T:");
+  lcd.print(temperature,2);
+  
+  lcd.print("C       ");
+  lcd.setCursor(7, 0);
+  lcd.print("   MS:");
+  lcd.print(motorStatus ? "ON " : "OFF");
+  lcd.setCursor(0, 1);
+  lcd.print("V:");
+  lcd.print(voltage,2);
+  lcd.print("V      ");
+  lcd.setCursor(7, 1);
+  lcd.print(" LI:");
+  lcd.print(lightIntensity);
+  lcd.print("lx");
+}
+BLYNK_WRITE(V0) {
+  thresholdTemp = param.asFloat();
+}
